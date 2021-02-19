@@ -81,9 +81,8 @@ fs.createReadStream("data.csv")
           spend = spend + row.amount;
           price = spend / pool;
         } else if (row.type === "DIV") {
-          console.log("has a DIV");
-
           // dividend
+          // console.log(`${key} does DIV`);
           const divnra = _.find(
             stock,
             (o) =>
@@ -94,14 +93,14 @@ fs.createReadStream("data.csv")
           usd = usd + row.amount - (divnra ? divnra.amount : 0);
           pln = pln + (row.amount - (divnra ? divnra.amount : 0)) * rate;
         } else if (row.type === "SSO") {
-          console.log("has a SSO");
           // spinoff
+          // console.log(`${key} does SSO`);
           pool = row.quantity;
           spend = 0;
           price = 0;
         } else if (row.type === "SSP") {
-          console.log("has a SSP");
           // split
+          // console.log(`${key} does SSP`);
           if (row.quantity > 0) {
             pool = row.quantity;
             spend = row.quantity * row.price;
@@ -110,46 +109,38 @@ fs.createReadStream("data.csv")
           // calc amount based on avarage price to date
           const amount = row.quantity * -1 * price;
 
-          // calc gain
+          // calc actual gain
           const gain = row.amount - amount;
 
-          // calc profit in usd
+          // add gain to total profit in usd
           usd = usd + gain;
 
-          // calc profit in pln
+          // add gain to total profit in pln
           pln = pln + gain * rate;
 
-          // subtract shares sold from the pool
+          // subtract sold shares from the pool
           pool = _.round(pool + row.quantity, 8);
 
-          // reset spend now with the average price
+          // reset spend with the new average price
           spend = pool * price;
 
-          // reset average price if sold all shares
+          // reset average price and total spend if sold all shares
           if (pool === 0) {
             price = 0;
             spend = 0;
           }
         }
-
-        // console.log(row.tradeDate, pool);
       });
 
-      // add profit to total profit
       total_usd = total_usd + _.round(usd, 2);
       total_pln = total_pln + _.round(pln, 2);
-      console.log(`——————————————`);
-      console.log(`${key}:`);
-      console.log(`pool: ${pool} USD`);
-      console.log(`price: ${price} USD`);
-      console.log(`spend: ${spend} USD`);
-      console.log(`profit: ${_.round(usd, 2)} USD`);
-      console.log(`profit: ${_.round(pln, 2)} PLN`);
-      console.log(`——————————————`);
+      console.log(
+        `profit from ${key}: ${_.round(usd, 2)} USD (${_.round(pln, 2)} PLN)`
+      );
     });
 
-    console.log(`types:`, types);
-    console.log(`tickers:`, tickers);
+    // console.log(`types:`, types);
+    // console.log(`tickers:`, tickers);
     console.log(`——————————————`);
     console.log(`TOTAL USD: ${_.round(total_usd, 2)}`);
     console.log(`TOTAL PLN: ${_.round(total_pln, 2)}`);

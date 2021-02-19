@@ -9,10 +9,6 @@ const rates = JSON.parse(fs.readFileSync("rates.json")).map((o) => {
   const m = str.slice(5, 7);
   const d = str.slice(8, 10);
 
-  // console.log({ y });
-  // console.log({ m });
-  // console.log({ d });
-
   const date = new Date(`${m}-${d}-${y} CST`);
 
   return {
@@ -21,60 +17,72 @@ const rates = JSON.parse(fs.readFileSync("rates.json")).map((o) => {
   };
 });
 
-let types = [];
 let rows = [];
-let total_USD = 0;
-let total_PLN = 0;
+let types = [];
+let tickers = [];
+
+let total_usd = 0;
+let total_pln = 0;
 
 fs.createReadStream("data.csv")
   .pipe(csv())
   .on("data", (row) => {
-    if (["CDEP", "CSD"].includes(row.type)) return null;
-    rows.push(row);
+    if (!["CDEP", "CSD", "DIVNRA"].includes(row.type)) rows.push(row);
   })
   .on("end", () => {
     const groups = _.groupBy(rows, (o) => o.symbol);
 
-    BUYS = 0;
-    SELLS = 0;
-
     Object.keys(groups).map((key, index) => {
-      const stock = _.orderBy(
-        groups[key].map((o) => {
-          const str = o.tradeDate.toString();
-          const y = str.slice(6, 10);
-          const m = str.slice(3, 5);
-          const d = str.slice(0, 2);
+      const stock = groups[key].map((o) => {
+        const str = o.tradeDate.toString();
+        const y = str.slice(6, 10);
+        const m = str.slice(3, 5);
+        const d = str.slice(0, 2);
 
-          const date = new Date(`${m}-${d}-${y} CST`);
+        const date = new Date(`${m}-${d}-${y} CST`);
 
-          return {
-            ...o,
-            amount: _.toNumber(o.amount),
-            price: _.toNumber(o.price),
-            quantity: _.toNumber(o.quantity),
-            timestamp: date.getTime(),
-            tradeDate: date,
-          };
-        }),
-        (o) => o.timestamp
-      );
+        return {
+          ...o,
+          amount: _.toNumber(o.amount),
+          date: date,
+          price: _.toNumber(o.price),
+          quantity: _.toNumber(o.quantity),
+          timestamp: date.getTime(),
+        };
+      });
 
-      let count = 0;
-      let price_USD = 0;
-      let spent_USD = 0;
+      // if (!["NKLA"].includes(key)) return null;
 
-      let profit_USD = 0;
-      let profit_PLN = 0;
+      let pool = 0;
+      let price = 0;
+      let spend = 0;
+
+      let usd = 0;
+      let pln = 0;
 
       stock.forEach((row) => {
         if (!types.includes(row.type)) types.push(row.type);
+        if (!tickers.includes(key)) tickers.push(key);
+
+        // get usd to pln rate for that timestamp
+        const rate = _.find(rates, (o) => {
+          return (
+            fns.isSameDay(o.timestamp, fns.addDays(row.timestamp, -1)) ||
+            fns.isSameDay(o.timestamp, fns.addDays(row.timestamp, -2)) ||
+            fns.isSameDay(o.timestamp, fns.addDays(row.timestamp, -3)) ||
+            fns.isSameDay(o.timestamp, fns.addDays(row.timestamp, -4))
+          );
+        }).mid;
+
+        // console.log(row.tradeDate, pool, row.quantity);
 
         if (row.type === "BUY") {
-          count = count + row.quantity;
-          spent_USD = spent_USD + row.amount;
-          price_USD = spent_USD / count;
+          pool = pool + row.quantity;
+          spend = spend + row.amount;
+          price = spend / pool;
         } else if (row.type === "DIV") {
+          console.log("has a DIV");
+
           // dividend
           const divnra = _.find(
             stock,
@@ -83,57 +91,67 @@ fs.createReadStream("data.csv")
               o.type === "DIVNRA" &&
               o.symbol === row.symbol
           );
-
-          profit_USD = profit_USD + row.amount - (divnra ? divnra.amount : 0);
+          usd = usd + row.amount - (divnra ? divnra.amount : 0);
+          pln = pln + (row.amount - (divnra ? divnra.amount : 0)) * rate;
         } else if (row.type === "SSO") {
+          console.log("has a SSO");
           // spinoff
-          count = row.quantity;
-          spent_USD = 0;
-          price_USD = 0;
+          pool = row.quantity;
+          spend = 0;
+          price = 0;
         } else if (row.type === "SSP") {
+          console.log("has a SSP");
           // split
           if (row.quantity > 0) {
-            count = row.quantity;
-            spent_USD = row.quantity * row.price;
+            pool = row.quantity;
+            spend = row.quantity * row.price;
           }
         } else if (row.type === "SELL") {
-          const gain = row.quantity * -1 * price_USD; // calc gain based on avarage price_USD to date
+          // calc amount based on avarage price to date
+          const amount = row.quantity * -1 * price;
 
-          const prev1DayRate = _.find(rates, (o) =>
-            fns.isSameDay(fns.addDays(row.timestamp, -1), o.timestamp)
-          );
-          const prev2DayRate = _.find(rates, (o) =>
-            fns.isSameDay(fns.addDays(row.timestamp, -2), o.timestamp)
-          );
-          const prev3PrevDayRate = _.find(rates, (o) =>
-            fns.isSameDay(fns.addDays(row.timestamp, -3), o.timestamp)
-          );
-          const prev4PrevDayRate = _.find(rates, (o) =>
-            fns.isSameDay(fns.addDays(row.timestamp, -4), o.timestamp)
-          );
+          // calc gain
+          const gain = row.amount - amount;
 
-          const rate =
-            prev1DayRate ||
-            prev2DayRate ||
-            prev3PrevDayRate ||
-            prev4PrevDayRate;
+          // calc profit in usd
+          usd = usd + gain;
 
-          profit_USD = profit_USD + (row.amount - gain); // calc profit in usd
-          profit_PLN = profit_USD * rate.mid; // calc profit in pln
-          count = count + row.quantity; // subtract shares sold from the count
-          spent_USD = count * price_USD; // reset spend now with the average price_USD
-          if (count === 0) price_USD = 0; // reset average price_USD if sold all shares
+          // calc profit in pln
+          pln = pln + gain * rate;
+
+          // subtract shares sold from the pool
+          pool = _.round(pool + row.quantity, 8);
+
+          // reset spend now with the average price
+          spend = pool * price;
+
+          // reset average price if sold all shares
+          if (pool === 0) {
+            price = 0;
+            spend = 0;
+          }
         }
+
+        // console.log(row.tradeDate, pool);
       });
 
       // add profit to total profit
-      total_PLN = total_PLN + _.round(profit_PLN, 2);
-      total_USD = total_USD + _.round(profit_USD, 2);
+      total_usd = total_usd + _.round(usd, 2);
+      total_pln = total_pln + _.round(pln, 2);
+      console.log(`——————————————`);
+      console.log(`${key}:`);
+      console.log(`pool: ${pool} USD`);
+      console.log(`price: ${price} USD`);
+      console.log(`spend: ${spend} USD`);
+      console.log(`profit: ${_.round(usd, 2)} USD`);
+      console.log(`profit: ${_.round(pln, 2)} PLN`);
+      console.log(`——————————————`);
     });
 
+    console.log(`types:`, types);
+    console.log(`tickers:`, tickers);
     console.log(`——————————————`);
-    console.log("types: ", types);
-    console.log(`——————————————`);
-    console.log(`TOTAL USD: ${_.round(total_USD, 2)}`);
-    console.log(`TOTAL PLN: ${_.round(total_PLN, 2)}`);
+    console.log(`TOTAL USD: ${_.round(total_usd, 2)}`);
+    console.log(`TOTAL PLN: ${_.round(total_pln, 2)}`);
+    console.log(`TOTAL TAX: ${(_.round(total_pln, 2) * 19) / 100}`);
   });

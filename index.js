@@ -66,8 +66,10 @@ fs.createReadStream("data.csv")
       let price = 0;
       let spend = 0;
 
-      let usd = 0;
-      let pln = 0;
+      // let stock_cost_pln = 0;
+      // let stock_cost_usd = 0;
+      let stock_gain_pln = 0;
+      let stock_gain_usd = 0;
 
       stock.forEach((row) => {
         // if (!types.includes(row.type)) types.push(row.type);
@@ -104,8 +106,8 @@ fs.createReadStream("data.csv")
               o.type === "DIVNRA" &&
               o.symbol === row.symbol
           );
-          usd = usd + row.amount - (divnra ? divnra.amount : 0);
-          pln = pln + row.amount - (divnra ? divnra.amount : 0);
+          gain_usd = gain_usd + row.amount - (divnra ? divnra.amount : 0);
+          gain_pln = gain_pln + row.amount - (divnra ? divnra.amount : 0);
         } else if (row.type === "SSO" && row.quantity > 0) {
           // spinoff
           pool = row.quantity;
@@ -130,8 +132,10 @@ fs.createReadStream("data.csv")
           const gain = row.amount + amount;
 
           // add gain to total profit in usd
-          usd = usd + gain;
-          pln = pln + gain * rate;
+          // stock_cost_usd = stock_cost_usd + amount;
+          // stock_cost_pln = stock_cost_pln + amount * rate;
+          stock_gain_usd = stock_gain_usd + gain;
+          stock_gain_pln = stock_gain_pln + gain * rate;
 
           // subtract sold shares from the pool
           pool = r8(pool + row.quantity);
@@ -147,7 +151,15 @@ fs.createReadStream("data.csv")
         }
       });
 
-      console.log(pad(key, `${r2(usd)} USD`, `${r2(pln)} PLN`));
+      console.log(separator);
+      // console.log(
+      //   pad(
+      //     `${key} cost`,
+      //     `${r2(stock_cost_usd)} USD`,
+      //     `${r2(stock_cost_pln)} PLN`
+      //   )
+      // );
+      console.log(pad(`${key} gain`, ``, `${r2(stock_gain_usd)} USD`));
     });
 
     const net_usd = gain_usd + cost_usd;
@@ -156,12 +168,16 @@ fs.createReadStream("data.csv")
     // console.log(`types:`, types);
     // console.log(`tickers:`, tickers);
     console.log(separator);
-    console.log(pad("COST", `${r2(cost_usd)} USD`, `${r2(cost_pln)} PLN`));
-    console.log(pad("GAIN", `${r2(gain_usd)} USD`, `${r2(gain_pln)} PLN`));
-    console.log(pad("NET", `${r2(net_usd)} USD`, `${r2(net_pln)} PLN`));
+    console.log(
+      pad("Total cost", `${r2(cost_usd)} USD`, `${r2(cost_pln)} PLN`)
+    );
+    console.log(
+      pad("Total profit", `${r2(gain_usd)} USD`, `${r2(gain_pln)} PLN`)
+    );
+    console.log(pad("Net profit", `${r2(net_usd)} USD`, `${r2(net_pln)} PLN`));
     console.log(
       pad(
-        "TAX",
+        "APPROX TAX",
         `${r2((net_usd * 19) / 100)} USD`,
         `${r2((net_pln * 19) / 100)} PLN`
       )

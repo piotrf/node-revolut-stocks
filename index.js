@@ -34,6 +34,8 @@ let cost_pln = 0;
 let gain_usd = 0;
 let gain_pln = 0;
 
+console.log(separator);
+
 fs.createReadStream("data.csv")
   .pipe(csv())
   .on("data", (row) => {
@@ -151,7 +153,6 @@ fs.createReadStream("data.csv")
         }
       });
 
-      console.log(separator);
       // console.log(
       //   pad(
       //     `${key} cost`,
@@ -159,7 +160,7 @@ fs.createReadStream("data.csv")
       //     `${r2(stock_cost_pln)} PLN`
       //   )
       // );
-      console.log(pad(`${key} gain`, ``, `${r2(stock_gain_usd)} USD`));
+      console.log(pad(`${key}`, ``, `${r2(stock_gain_usd)} USD`));
     });
 
     const net_usd = gain_usd + cost_usd;
@@ -168,16 +169,12 @@ fs.createReadStream("data.csv")
     // console.log(`types:`, types);
     // console.log(`tickers:`, tickers);
     console.log(separator);
-    console.log(
-      pad("Total cost", `${r2(cost_usd)} USD`, `${r2(cost_pln)} PLN`)
-    );
-    console.log(
-      pad("Total profit", `${r2(gain_usd)} USD`, `${r2(gain_pln)} PLN`)
-    );
+    console.log(pad("Cost", `${r2(cost_usd)} USD`, `${r2(cost_pln)} PLN`));
+    console.log(pad("Profit", `${r2(gain_usd)} USD`, `${r2(gain_pln)} PLN`));
     console.log(pad("Net profit", `${r2(net_usd)} USD`, `${r2(net_pln)} PLN`));
     console.log(
       pad(
-        "APPROX TAX",
+        "Tax 19%",
         `${r2((net_usd * 19) / 100)} USD`,
         `${r2((net_pln * 19) / 100)} PLN`
       )
